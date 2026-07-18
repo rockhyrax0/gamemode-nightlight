@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+#
+# gamemode-nightlight — while a game runs under GameMode, suspend KDE Night
+# Light and dim your displays. Restore both when the game exits.
+#
+# Usage: gamemode-nightlight start | end
+#        (wired up from the [custom] section of gamemode.ini — see README.md)
+#
+# Two things here are load-bearing and non-obvious; both are explained at
+# length in README.md → "How it works":
+#   1. Brightness goes through PowerDevil's org.kde.ScreenBrightness D-Bus
+#      service, not ddcutil. PowerDevil owns the Plasma brightness slider and
+#      drives ddcutil itself, so this keeps the slider in sync and is fast.
+#   2. Every background job is detached from the pipe GameMode reads its
+#      scripts' output from. Anything still holding that pipe open makes
+#      GameMode stall the game's launch for its full script_timeout.
+
+# ----------------------------- configuration -------------------------------
+BRIGHTNESS_PERCENT=15       # gaming brightness, as a percent of each display's max
+TARGET_DISPLAYS="external"  # which displays to dim: external | all | internal
+TARGET_LABEL=""             # optional: pin to one monitor. If set, only displays
+                            #   whose Label (EDID model name, e.g. "27GL850")
+                            #   contain this text are dimmed; overrides
+                            #   TARGET_DISPLAYS. PowerDevil exposes no connector
+                            #   names like DP-1 here, so match on the model.
+SHOW_OSD=0                  # 1 = show the brightness OSD on change, 0 = silent
+# ---------------------------------------------------------------------------
+
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+INHIBIT_PID_FILE="$RUNTIME_DIR/gamemode-nightlight.pid"
+BRIGHT_FILE="$RUNTIME_DIR/gamemode-brightness.state"
+
+SB_SERVICE="org.kde.ScreenBrightness"
+SB_PATH="/org/kde/ScreenBrightness"
+SB_IFACE="org.kde.ScreenBrightness"
+SB_DISP_IFACE="org.kde.ScreenBrightness.Display"
+
+# SetBrightness flags bitfield: 0x1 = SuppressIndicator (no OSD).
+if [ "$SHOW_OSD" = "1" ]; then SB_FLAGS=0; else SB_FLAGS=1; fi
+
+# Read one property off a display object, e.g. sb_get display0 Brightness -> 42
+sb_get() {  # $1 = display dbus name, $2 = property
+    busctl --user get-property "$SB_SERVICE" "$SB_PATH/$1" "$SB_DISP_IFACE" "$2" 2>/dev/null \
+        | awk '{print $2}'
+}
+
+# Read a string property (e.g. Label) that may contain spaces.
+sb_get_str() {  # $1 = display dbus name, $2 = property
+    busctl --user get-property "$SB_SERVICE" "$SB_PATH/$1" "$SB_DISP_IFACE" "$2" 2>/dev/null \
+        | awk -F'"' 'NF>=2{print $2}'
+}
+
+# Emit the dbus names of the displays we should act on, one per line.
+sb_target_displays() {
+    local names name internal label
+    mapfile -t names < <(
+        busctl --user get-property "$SB_SERVICE" "$SB_PATH" "$SB_IFACE" DisplaysDBusNames 2>/dev/null \
+            | grep -oP '"[^"]+"' | tr -d '"'
+    )
+    for name in "${names[@]}"; do
+        if [ -n "$TARGET_LABEL" ]; then              # pinned to one monitor by model name
+            label=$(sb_get_str "$name" Label)
+            shopt -s nocasematch
+            [[ "$label" == *"$TARGET_LABEL"* ]] && echo "$name"
+            shopt -u nocasematch
+            continue
+        fi
+        internal=$(sb_get "$name" IsInternal)
+        case "$TARGET_DISPLAYS" in
+            all)      echo "$name" ;;
+            internal) [ "$internal" = "true"  ] && echo "$name" ;;
+            *)        [ "$internal" = "false" ] && echo "$name" ;;   # external (default)
+        esac
+    done
+}
+
+apply_gaming_brightness() {
+    : > "$BRIGHT_FILE"                              # start a fresh snapshot
+    local name old max target
+    while read -r name; do
+        [ -n "$name" ] || continue
+        old=$(sb_get "$name" Brightness)
+        max=$(sb_get "$name" MaxBrightness)
+        [ -n "$old" ] && [ -n "$max" ] && [ "$max" -gt 0 ] 2>/dev/null || continue
+        printf '%s %s\n' "$name" "$old" >> "$BRIGHT_FILE"      # remember for restore
+        target=$(( (BRIGHTNESS_PERCENT * max + 50) / 100 ))    # rounded percent of max
+        [ "$target" -lt 1 ] && target=1
+        busctl --user call "$SB_SERVICE" "$SB_PATH/$name" "$SB_DISP_IFACE" \
+            SetBrightness iu "$target" "$SB_FLAGS" >/dev/null 2>&1
+    done < <(sb_target_displays)
+}
+
+restore_brightness() {
+    [ -f "$BRIGHT_FILE" ] || return
+    local name old
+    while read -r name old; do
+        [ -n "$name" ] && [ -n "$old" ] || continue
+        busctl --user call "$SB_SERVICE" "$SB_PATH/$name" "$SB_DISP_IFACE" \
+            SetBrightness iu "$old" "$SB_FLAGS" >/dev/null 2>&1
+    done < "$BRIGHT_FILE"
+    rm -f "$BRIGHT_FILE"
+}
+
+stop_inhibitor() {
+    [ -f "$INHIBIT_PID_FILE" ] || return
+    local pid
+    pid=$(cat "$INHIBIT_PID_FILE" 2>/dev/null)
+    if [ -n "$pid" ]; then
+        # kde-inhibit leads its own session/process group, so the negative-PID
+        # kill also reaps the `sleep infinity` it wraps (no leaked sleeps).
+        kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+    fi
+    rm -f "$INHIBIT_PID_FILE"
+}
+
+case "$1" in
+    start)
+        stop_inhibitor          # clear a stale inhibitor if a previous game crashed
+
+        # Suspend Night Light, fully detached so GameMode does not wait on it.
+        # The inner shell records its own PID (which it then exec()s into, so it
+        # becomes kde-inhibit's PID and process-group id) for teardown on `end`.
+        setsid --fork env PIDF="$INHIBIT_PID_FILE" \
+            sh -c 'echo $$ > "$PIDF"; exec kde-inhibit --colorCorrect sleep infinity' \
+            >/dev/null 2>&1 </dev/null
+
+        # Dim in the background, also detached, for the same no-launch-delay reason.
+        apply_gaming_brightness >/dev/null 2>&1 </dev/null &
+        ;;
+    end)
+        restore_brightness >/dev/null 2>&1 </dev/null &
+        stop_inhibitor
+        ;;
+    *)
+        echo "Usage: $0 {start|end}"
+        exit 1
+        ;;
+esac
