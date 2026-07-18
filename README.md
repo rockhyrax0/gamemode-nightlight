@@ -1,6 +1,6 @@
 # gamemode-nightlight
 
-Suspend KDE's Night Light and dim your monitors while a game is running, then put
+Suspend KDE's Night Light and sets monitors brightness level while a game is running, then put
 everything back the way it was when you quit. Hooks into
 [GameMode](https://github.com/FeralInteractive/gamemode), so it happens
 automatically on launch and exit — no wrapper script, no manual toggling, no
