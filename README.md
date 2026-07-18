@@ -6,9 +6,7 @@ everything back the way it was when you quit. Hooks into
 automatically on launch and exit — no wrapper script, no manual toggling, no
 remembering.
 
-Night Light is great at 11pm and useless when you're trying to spot something in
-a dark corridor. This drops it for the duration of the game, and takes brightness
-down to something that isn't a flashbang in a dark room.
+I personally have Night Light toggled on 24/7 with my monitor brightness usually set to ~0% when not gaming. I created this because I found it annoying to manually togged Night Light within KDE Plasma and then set my monitor brightness to 15%.
 
 ```ini
 # ~/.config/gamemode.ini
