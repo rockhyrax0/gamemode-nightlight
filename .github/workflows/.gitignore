@@ -1,9 +1,0 @@
-# editors
-*~
-*.swp
-*.swo
-.idea/
-.vscode/
-
-# os cruft
-.DS_Store
