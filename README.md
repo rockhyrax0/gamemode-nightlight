@@ -3,7 +3,7 @@
 Suspend KDE's Night Light and sets monitors brightness level while a game is running, then put
 everything back the way it was when you quit. Hooks into
 [GameMode](https://github.com/FeralInteractive/gamemode), so it happens
-automatically on launch and exit — no wrapper script, no manual toggling, no
+automatically on launch and exit: no wrapper script, no manual toggling, no
 remembering.
 
 I personally have Night Light toggled on 24/7 with my monitor brightness usually set to ~0% when not gaming. I created this because I found it annoying to manually toggle Night Light within KDE Plasma and then set my monitor brightness to 15%.
@@ -31,7 +31,7 @@ Wayland and X11 both work.
 
 **Will brightness control work on my monitor?** Open the Brightness and Colour
 applet and drag the slider for that display. If Plasma can move it, so can this
-script — same code path. If Plasma can't (no DDC/CI support, monitor has it
+script: same code path. If Plasma can't (no DDC/CI support, monitor has it
 disabled in its OSD, or `POWERDEVIL_NO_DDCUTIL=1` is set), the Night Light half
 still works fine on its own.
 
@@ -57,7 +57,7 @@ install -Dm755 gamemode-nightlight ~/.local/bin/gamemode-nightlight
 
 Then add the `[custom]` block from the top of this README to
 `~/.config/gamemode.ini`, creating the file if it doesn't exist. **Use an
-absolute path** — gamemoded's environment won't reliably have `~/.local/bin` on
+absolute path**: gamemoded's environment won't reliably have `~/.local/bin` on
 `$PATH`. If you already have a `[custom]` section, add the two lines to it rather
 than starting a second one.
 
@@ -74,7 +74,7 @@ Edit the block at the top of the script.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `BRIGHTNESS_PERCENT` | `15` | Gaming brightness, as a percent of each display's max — not a raw DDC value, so it does the right thing across displays with different scales. |
+| `BRIGHTNESS_PERCENT` | `15` | Gaming brightness, as a percent of each display's max, not a raw DDC value, so it does the right thing across displays with different scales. |
 | `TARGET_DISPLAYS` | `external` | Which displays to dim: `external`, `all`, or `internal`. |
 | `TARGET_LABEL` | `""` (off) | Pin to one monitor by EDID model name. If set, only displays whose label contains this text get dimmed (case-insensitive substring), and `TARGET_DISPLAYS` is ignored. |
 | `SHOW_OSD` | `0` | `1` pops the brightness OSD on every change. `0` keeps it silent. |
@@ -82,7 +82,7 @@ Edit the block at the top of the script.
 ### Finding your monitor's label
 
 `org.kde.ScreenBrightness` identifies displays by EDID model name, not by
-connector name — there's no `DP-1` to match on here. To see what yours are called:
+connector name. There's no `DP-1` to match on here. To see what yours are called:
 
 ```bash
 for d in $(busctl --user get-property org.kde.ScreenBrightness \
@@ -98,7 +98,7 @@ display0	s "27GL850"
 display1	s "U2719DC"
 ```
 
-Any substring works — `TARGET_LABEL="27GL850"` is enough to pin to the first one.
+Any substring works: `TARGET_LABEL="27GL850"` is enough to pin to the first one.
 
 ## Testing it
 
@@ -116,7 +116,7 @@ journalctl --user -u gamemoded -f
 ```
 
 You want to see `Executing script [...]` on launch and exit, and the game should
-appear immediately — no pause between clicking Play and the window showing up. If
+appear immediately, no pause between clicking Play and the window showing up. If
 there is one, see the second design note below.
 
 ## How it works
@@ -127,7 +127,7 @@ Two decisions in here are non-obvious and both were arrived at the hard way.
 
 The obvious implementation is `ddcutil setvcp 10 15`. Don't.
 
-Since Plasma 6.2, PowerDevil owns external monitor brightness — it drives
+Since Plasma 6.2, PowerDevil owns external monitor brightness. It drives
 libddcutil itself, and it's what backs the slider in the Brightness and Colour
 applet. A direct `ddcutil` call still changes the monitor, but PowerDevil never
 finds out, so the slider desyncs: it shows a stale value, and the next time
@@ -148,7 +148,7 @@ stderr wired to a pipe, then reads that pipe with `select()` bounded by
 `script_timeout` (10 seconds by default). It's waiting for EOF.
 
 EOF arrives only when every copy of the pipe's write end is closed. A backgrounded
-job inherits the script's stdout and stderr — so the natural-looking
+job inherits the script's stdout and stderr, so the natural-looking
 
 ```bash
 kde-inhibit --colorCorrect sleep infinity &
@@ -186,17 +186,17 @@ stale inhibitor before creating a new one. To clean up immediately, just run
 ## Troubleshooting
 
 **Night Light suspends but brightness doesn't move.** Check Plasma's own slider
-for that display first — if it can't move it, neither can this. Also check you
+for that display first. If it can't move it, neither can this. Also check you
 don't have `POWERDEVIL_NO_DDCUTIL=1` set anywhere.
 
 **Nothing happens at all.** `journalctl --user -u gamemoded -f` while launching.
-No `Executing script` line means GameMode isn't reading your config — confirm the
+No `Executing script` line means GameMode isn't reading your config. Confirm the
 file is at `~/.config/gamemode.ini` and that the paths in it are absolute.
 
-**The wrong monitor dims.** Set `TARGET_LABEL` — see above.
+**The wrong monitor dims.** Set `TARGET_LABEL` (see above).
 
 **Games take ~10s to launch.** Something in your `[custom]` scripts is holding
-GameMode's pipe open. If it's not this script, it's another one — see the second
+GameMode's pipe open. If it's not this script, it's another one. See the second
 design note.
 
 **Brightness didn't come back.** `end` never ran. Run it by hand;
@@ -204,4 +204,4 @@ design note.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
