@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # gamemode-nightlight — while a game runs under GameMode, suspend KDE Night
-# Light and dim your displays. Restore both when the game exits.
+# Light and brighten your displays. Restore both when the game exits.
 #
 # Usage: gamemode-nightlight start | end
 #        (wired up from the [custom] section of gamemode.ini — see README.md)
