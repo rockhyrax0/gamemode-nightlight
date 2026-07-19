@@ -193,7 +193,7 @@ don't have `POWERDEVIL_NO_DDCUTIL=1` set anywhere.
 No `Executing script` line means GameMode isn't reading your config. Confirm the
 file is at `~/.config/gamemode.ini` and that the paths in it are absolute.
 
-**The wrong monitor dims.** Set `TARGET_LABEL` (see above).
+**The wrong monitor brightens/dims.** Set `TARGET_LABEL` (see above).
 
 **Games take ~10s to launch.** Something in your `[custom]` scripts is holding
 GameMode's pipe open. If it's not this script, it's another one. See the second
